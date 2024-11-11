@@ -77,9 +77,8 @@ Para usar a interface de usuário, abra o arquivo `index.html` com o navegador.
 
 ## Endpoints Principais
 
-Método	Endpoint	Descrição
-POST	/login	Autenticar e obter o token JWT.
-GET	/tasks	Listar todas as tarefas.
-POST	/tasks	Adicionar nova tarefa.
-PUT	/tasks/<task_id>	Atualizar uma tarefa existente.
-DELETE	/tasks/<task_id>	Remover uma tarefa.
+POST	/login	            Autenticar e obter o token JWT.  
+GET	    /tasks	            Listar todas as tarefas.  
+POST	/tasks	            Adicionar nova tarefa.  
+PUT	    /tasks/<task_id>	Atualizar uma tarefa existente.  
+DELETE	/tasks/<task_id>	Remover uma tarefa.  
