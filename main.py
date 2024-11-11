@@ -4,9 +4,19 @@ from redis import Redis
 from datetime import datetime
 from werkzeug.exceptions import BadRequest
 import json
+from flask_cors import CORS  # Importar para habilitar CORS
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required
+import bleach
+
+# read "password.txt" file
+with open("password.txt", "r") as file:
+    senha_admin = file.read()
 
 # Inicializando o aplicativo Flask e as extensões
 app = Flask(__name__)
+app.config["JWT_SECRET_KEY"] = "sua_chave_secreta"  # Use uma chave segura e privada
+jwt = JWTManager(app)
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 # Configuração do banco de dados MySQL
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://root:0909@localhost/todo_db'
@@ -16,7 +26,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 # Inicializando o Redis
-redis = Redis(host='localhost', port=6379, db=0)
+redis = Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
 # Modelo de Tarefa
 class Task(db.Model):
@@ -26,17 +36,36 @@ class Task(db.Model):
     status = db.Column(db.String(20), default="pending")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+# Criar as tabelas, caso ainda não existam
+with app.app_context():
+    db.create_all()
+    
 # Função para validar dados da tarefa
 def validate_task_data(data):
     if 'title' not in data or not data['title']:
         raise BadRequest("O título da tarefa não pode ser vazio.")
     return data
 
-# Endpoint para adicionar uma nova tarefa
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    username = data.get("username")
+    password = data.get("password")
+
+    if username == "admin" and password == senha_admin:
+        access_token = create_access_token(identity=username)
+        return jsonify(access_token=access_token), 200
+    else:
+        return jsonify({"msg": "Usuário ou senha incorretos"}), 401
+    
+
 @app.route('/tasks', methods=['POST'])
+@jwt_required()  # Garante que somente usuários autenticados podem acessar
 def add_task():
     data = request.get_json()
-
+    title = bleach.clean(data.get("title", ""))
+    if not title:
+        return jsonify({"error": "Título da tarefa não pode estar vazio."}), 400
     try:
         validate_task_data(data)
         task = Task(title=data['title'], status='pending')
@@ -57,17 +86,12 @@ def get_tasks():
     # Verificar se os dados estão no cache
     cached_tasks = redis.get('all_tasks')
     if cached_tasks:
-        return jsonify({"tasks": json.loads(cached_tasks)}), 200
-
-    # Se não estiver no cache, pegar do banco de dados
+        return jsonify({"tasks": json.loads(cached_tasks)})
+    
     tasks = Task.query.all()
     tasks_list = [{"id": task.id, "title": task.title, "status": task.status} for task in tasks]
-
-    # Salvar no cache para o futuro
     redis.set('all_tasks', json.dumps(tasks_list))
-
-    return jsonify({"tasks": tasks_list}), 200
-
+    return jsonify({"tasks": tasks_list})
 
 @app.route('/tasks/<int:task_id>', methods=['PUT'])
 def update_task(task_id):
@@ -75,17 +99,18 @@ def update_task(task_id):
     if not task:
         return jsonify({"message": "Tarefa não encontrada"}), 404
     
-    # Atualizando a tarefa
-    task.title = request.json['title']
-    task.status = request.json['status']
+    # se o status for "pending", muda para "done" e vice-versa
+    task.status = "done" if task.status == "pending" else "pending"
+
     db.session.commit()
 
     # Invalidar o cache após a atualização
     redis.delete('all_tasks')
 
-    return jsonify({"message": "Tarefa atualizada com sucesso"}), 200
+    return jsonify({"message": "Tarefa atualizada com sucesso"})
 
 @app.route('/tasks/<int:task_id>', methods=['DELETE'])
+@jwt_required()  # Garante que somente usuários autenticados podem acessar
 def delete_task(task_id):
     task = Task.query.get(task_id)
     if not task:
