@@ -4,15 +4,13 @@ from redis import Redis
 from datetime import datetime
 from werkzeug.exceptions import BadRequest
 import json
-from flask_cors import CORS  # Importar para habilitar CORS
+from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required
 import bleach
 
-# read "password.txt" file
 with open("password.txt", "r") as file:
     senha_admin = file.read()
 
-# Inicializando o aplicativo Flask e as extensões
 app = Flask(__name__)
 app.config["JWT_SECRET_KEY"] = "sua_chave_secreta"  # Use uma chave segura e privada
 jwt = JWTManager(app)
@@ -22,10 +20,8 @@ CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://root:0909@localhost/todo_db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Inicializando o banco de dados SQLAlchemy
 db = SQLAlchemy(app)
 
-# Inicializando o Redis
 redis = Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
 # Modelo de Tarefa
@@ -104,19 +100,17 @@ def update_task(task_id):
 
     db.session.commit()
 
-    # Invalidar o cache após a atualização
     redis.delete('all_tasks')
 
     return jsonify({"message": "Tarefa atualizada com sucesso"})
 
 @app.route('/tasks/<int:task_id>', methods=['DELETE'])
-@jwt_required()  # Garante que somente usuários autenticados podem acessar
+@jwt_required()
 def delete_task(task_id):
     task = Task.query.get(task_id)
     if not task:
         return jsonify({"message": "Tarefa não encontrada"}), 404
 
-    # Deletando a tarefa
     db.session.delete(task)
     db.session.commit()
 
@@ -130,7 +124,6 @@ def delete_task(task_id):
 def index():
     return jsonify({"message": "API de To-Do List funcionando!"}), 200
 
-# Função para inicializar o banco de dados e o cache
 def init_db():
     db.create_all()
 
